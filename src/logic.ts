@@ -79,14 +79,9 @@ export function isValidStandardSlot(date: Date): boolean {
  * Checks if a slot is available (not exactly duplicate with any existing booking).
  * Pass an optional `excludeBookingId` to ignore the current booking when editing.
  */
-export function isSlotAvailable(queryDate: Date, bookings: Booking[], excludeBookingId?: string): boolean {
-  const queryTime = queryDate.getTime();
-  
-  return !bookings.some(booking => {
-    if (excludeBookingId && booking.id === excludeBookingId) return false;
-    const bDate = new Date(booking.datetimeIso);
-    return Math.abs(bDate.getTime() - queryTime) < 60000; // less than 1 minute diff
-  });
+export function isSlotAvailable(_queryDate: Date, _bookings: Booking[], _excludeBookingId?: string): boolean {
+  // Now always returns true to allow multiple appointments per slot
+  return true;
 }
 
 export const MOCK_USERS: User[] = [
