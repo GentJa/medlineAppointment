@@ -155,19 +155,6 @@ body {
   gap: 0.75rem;
 }
 
-.notification-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  cursor: pointer;
-  background: var(--bg-color);
-  padding: 0.4rem 0.6rem;
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-}
-
 .logout-btn {
   background: none;
   border: none;
@@ -429,28 +416,4 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.toast-notification {
-  position: fixed;
-  bottom: 1.5rem;
-  right: 1.5rem;
-  left: 1.5rem; /* Full width on mobile */
-  background: var(--text-main);
-  color: white;
-  padding: 1rem;
-  border-radius: 12px;
-  z-index: 2000;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-size: 0.9rem;
-  box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-  pointer-events: auto;
-}
 
-@media (min-width: 600px) {
-  .toast-notification {
-    left: auto;
-    width: auto;
-    max-width: 350px;
-  }
-}

@@ -31,7 +31,6 @@ let selectedDateString: string = '';
 let selectedTimeString: string = ''; // Format HH:mm for custom, or full date string for standard selected slot 
 let selectedTimeStandardSlotObj: Date | null = null;
 let editingBookingId: string | null = null;
-let notificationsEnabled = true;
 
 // DOM Elements
 const loginModal = document.getElementById('login-modal') as HTMLDivElement;
@@ -43,8 +42,6 @@ const passwordInput = document.getElementById('password-input') as HTMLInputElem
 const loginError = document.getElementById('login-error') as HTMLDivElement;
 const logoutBtn = document.getElementById('logout-btn') as HTMLButtonElement;
 const deleteAllBtn = document.getElementById('delete-all-btn') as HTMLButtonElement;
-const notificationCheckbox = document.getElementById('notification-checkbox') as HTMLInputElement;
-const notificationsContainer = document.getElementById('notifications-container') as HTMLDivElement;
 
 const modeRadios = document.querySelectorAll<HTMLInputElement>('input[name="mode"]');
 const firstNameInput = document.getElementById('first-name-input') as HTMLInputElement;
@@ -109,23 +106,7 @@ function init() {
         existingBookings = [];
         saveBookings();
         renderBookings();
-        showNotification('All appointments have been deleted.');
       }
-    }
-  });
-  
-  notificationCheckbox.addEventListener('change', async (e) => {
-    notificationsEnabled = (e.target as HTMLInputElement).checked;
-    if (notificationsEnabled && "Notification" in window && Notification.permission !== "granted") {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        notificationsEnabled = false;
-        notificationCheckbox.checked = false;
-        alert("System notifications were blocked. Please enable them in your browser settings to stay updated!");
-      }
-    }
-    if (currentUser) {
-      localStorage.setItem(`notify_${currentUser.id}`, String(notificationsEnabled));
     }
   });
 
@@ -151,58 +132,6 @@ function init() {
 
   bookButton.addEventListener('click', handleBooking);
   cancelEditBtn.addEventListener('click', cancelEdit);
-
-  // Start checking for upcoming appointments every 15 seconds
-  setInterval(checkUpcomingAppointments, 15000);
-}
-
-function showNotification(message: string) {
-  if (!notificationsEnabled) return;
-
-  // 1. Show UI Toast (Foreground)
-  const toast = document.createElement('div');
-  toast.className = 'toast-notification';
-  toast.innerHTML = `<span>🔔</span> <span>${message}</span>`;
-  notificationsContainer.appendChild(toast);
-  
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(10px) scale(0.95)';
-    toast.style.transition = 'all 0.3s ease';
-    setTimeout(() => toast.remove(), 300);
-  }, 6000);
-
-  // 2. Show System Notification (Background)
-  if ("Notification" in window && Notification.permission === "granted") {
-    try {
-      new Notification("Medline Appointment", {
-        body: message,
-        icon: "/pwa-192x192.png", // Path from manifest
-        badge: "/favicon.svg",
-        tag: "appointment-reminder" // Group similar notifications
-      });
-    } catch (e) {
-      console.warn("Failed to show system notification:", e);
-    }
-  }
-}
-
-function checkUpcomingAppointments() {
-  if (!notificationsEnabled) return;
-  const now = new Date();
-  
-  existingBookings.forEach(b => {
-    if (b.missed || b.notified) return;
-    
-    const bDate = new Date(b.datetimeIso);
-    const diffMs = bDate.getTime() - now.getTime();
-    
-    // If appointment is within the next 5 minutes (and strictly in the future)
-    if (diffMs > 0 && diffMs <= 5 * 60000) {
-      showNotification(`${b.patientName} ${b.patientLastName} is arriving in 5 minutes or less!`);
-      b.notified = true;
-    }
-  });
 }
 
 function loginUser(user: User) {
@@ -210,10 +139,6 @@ function loginUser(user: User) {
   localStorage.setItem('medline_user', JSON.stringify(user));
   currentUserDisplay.textContent = `(${user.username})`;
   
-  const savedPref = localStorage.getItem(`notify_${user.id}`);
-  notificationsEnabled = savedPref === null ? true : savedPref === 'true';
-  notificationCheckbox.checked = notificationsEnabled;
-
   if (currentUser.role === 'admin') {
     deleteAllBtn.classList.remove('hidden');
   } else {

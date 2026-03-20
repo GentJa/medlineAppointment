@@ -21,7 +21,6 @@ export interface Booking {
 
   // Status flags
   missed?: boolean;
-  notified?: boolean;
 }
 
 /**
