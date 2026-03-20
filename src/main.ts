@@ -1,0 +1,555 @@
+import { generateTimeSlots, isSlotAvailable, isSunday, authenticateUser, escapeHTML, type Booking, type User } from './logic';
+
+// @ts-ignore
+import { registerSW } from 'virtual:pwa-register';
+
+if ('serviceWorker' in navigator) {
+  registerSW({ immediate: true });
+}
+
+// Mock Firestore / Database equivalent
+let existingBookings: Booking[] = [
+  {
+    id: 'mock-1',
+    datetimeIso: new Date(new Date().setHours(17, 30, 0, 0)).toISOString(),
+    patientName: 'Jane',
+    patientLastName: 'Doe',
+    createdBy: 'Admin Gent',
+    createdAt: new Date(Date.now() - 86400000).toISOString()
+  }
+];
+
+// State
+let currentUser: User | null = null;
+let currentMode: 'standard' | 'custom' = 'standard';
+let selectedDateString: string = '';
+let selectedTimeString: string = ''; // Format HH:mm for custom, or full date string for standard selected slot 
+let selectedTimeStandardSlotObj: Date | null = null;
+let editingBookingId: string | null = null;
+let notificationsEnabled = true;
+
+// DOM Elements
+const loginModal = document.getElementById('login-modal') as HTMLDivElement;
+const appMain = document.getElementById('app-main') as HTMLElement;
+const currentUserDisplay = document.getElementById('current-user-display') as HTMLSpanElement;
+const loginForm = document.getElementById('login-form') as HTMLFormElement;
+const usernameInput = document.getElementById('username-input') as HTMLInputElement;
+const passwordInput = document.getElementById('password-input') as HTMLInputElement;
+const loginError = document.getElementById('login-error') as HTMLDivElement;
+const logoutBtn = document.getElementById('logout-btn') as HTMLButtonElement;
+const deleteAllBtn = document.getElementById('delete-all-btn') as HTMLButtonElement;
+const notificationCheckbox = document.getElementById('notification-checkbox') as HTMLInputElement;
+const notificationsContainer = document.getElementById('notifications-container') as HTMLDivElement;
+
+const modeRadios = document.querySelectorAll<HTMLInputElement>('input[name="mode"]');
+const firstNameInput = document.getElementById('first-name-input') as HTMLInputElement;
+const lastNameInput = document.getElementById('last-name-input') as HTMLInputElement;
+const phoneInput = document.getElementById('phone-input') as HTMLInputElement;
+const dateInput = document.getElementById('date-input') as HTMLInputElement;
+const sundayWarning = document.getElementById('sunday-warning') as HTMLDivElement;
+const standardSlotsContainer = document.getElementById('standard-slots-container') as HTMLDivElement;
+const customTimeContainer = document.getElementById('custom-time-container') as HTMLDivElement;
+const customTimeInput = document.getElementById('custom-time-input') as HTMLInputElement;
+const bookButton = document.getElementById('book-button') as HTMLButtonElement;
+const cancelEditBtn = document.getElementById('cancel-edit-btn') as HTMLButtonElement;
+const bookingError = document.getElementById('booking-error') as HTMLDivElement;
+const bookingSuccess = document.getElementById('booking-success') as HTMLDivElement;
+const bookingsList = document.getElementById('bookings-list') as HTMLUListElement;
+const formSubtitle = document.getElementById('form-subtitle') as HTMLParagraphElement;
+
+// Initialization
+function init() {
+  const today = new Date();
+  const todayStr = today.toISOString().split('T')[0];
+  
+  dateInput.value = todayStr;
+  
+  selectedDateString = dateInput.value;
+  
+  handleDateChange();
+
+  // Attach Event Listeners
+  loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const u = usernameInput.value.trim();
+    const p = passwordInput.value.trim();
+    
+    if (u && p) {
+      const authUser = authenticateUser(u, p);
+      if (authUser) {
+        loginError.classList.add('hidden');
+        loginUser(authUser);
+      } else {
+        loginError.classList.remove('hidden');
+      }
+    }
+  });
+
+  logoutBtn.addEventListener('click', logoutUser);
+  
+  deleteAllBtn.addEventListener('click', () => {
+    if (currentUser?.role === 'admin') {
+      if (confirm('Are you sure you want to delete all appointments? This action cannot be undone.')) {
+        existingBookings = [];
+        renderBookings();
+        showNotification('All appointments have been deleted.');
+      }
+    }
+  });
+  
+  notificationCheckbox.addEventListener('change', (e) => {
+    notificationsEnabled = (e.target as HTMLInputElement).checked;
+    if (currentUser) {
+      localStorage.setItem(`notify_${currentUser.id}`, String(notificationsEnabled));
+    }
+  });
+
+  modeRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      currentMode = (e.target as HTMLInputElement).value as 'standard' | 'custom';
+      handleModeChange();
+    });
+  });
+
+  dateInput.addEventListener('change', (e) => {
+    selectedDateString = (e.target as HTMLInputElement).value;
+    handleDateChange();
+  });
+
+  customTimeInput.addEventListener('change', (e) => {
+    selectedTimeString = (e.target as HTMLInputElement).value;
+    validateSelection();
+  });
+
+  firstNameInput.addEventListener('input', validateSelection);
+  lastNameInput.addEventListener('input', validateSelection);
+
+  bookButton.addEventListener('click', handleBooking);
+  cancelEditBtn.addEventListener('click', cancelEdit);
+
+  // Start checking for upcoming appointments every 15 seconds
+  setInterval(checkUpcomingAppointments, 15000);
+}
+
+function showNotification(message: string) {
+  if (!notificationsEnabled) return;
+  const toast = document.createElement('div');
+  toast.className = 'toast-notification';
+  toast.innerHTML = `<span>🔔</span> <span>${message}</span>`;
+  notificationsContainer.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(10px) scale(0.95)';
+    toast.style.transition = 'all 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 6000);
+}
+
+function checkUpcomingAppointments() {
+  if (!notificationsEnabled) return;
+  const now = new Date();
+  
+  existingBookings.forEach(b => {
+    if (b.missed || b.notified) return;
+    
+    const bDate = new Date(b.datetimeIso);
+    const diffMs = bDate.getTime() - now.getTime();
+    
+    // If appointment is within the next 5 minutes (and strictly in the future)
+    if (diffMs > 0 && diffMs <= 5 * 60000) {
+      showNotification(`${b.patientName} ${b.patientLastName} is arriving in 5 minutes or less!`);
+      b.notified = true;
+    }
+  });
+}
+
+function loginUser(user: User) {
+  currentUser = user;
+  currentUserDisplay.textContent = `(${user.username})`;
+  
+  const savedPref = localStorage.getItem(`notify_${user.id}`);
+  notificationsEnabled = savedPref === null ? true : savedPref === 'true';
+  notificationCheckbox.checked = notificationsEnabled;
+
+  if (currentUser.role === 'admin') {
+    deleteAllBtn.classList.remove('hidden');
+  } else {
+    deleteAllBtn.classList.add('hidden');
+  }
+
+  loginModal.style.opacity = '0';
+  setTimeout(() => {
+    loginModal.classList.add('hidden');
+    appMain.classList.remove('hidden');
+    renderBookings();
+  }, 300);
+}
+
+function logoutUser() {
+  currentUser = null;
+  appMain.classList.add('hidden');
+  loginModal.classList.remove('hidden');
+  usernameInput.value = '';
+  passwordInput.value = '';
+  loginError.classList.add('hidden');
+  // trigger reflow
+  void loginModal.offsetWidth;
+  loginModal.style.opacity = '1';
+  cancelEdit();
+}
+
+function handleModeChange() {
+  selectedTimeString = '';
+  selectedTimeStandardSlotObj = null;
+  customTimeInput.value = '';
+  bookingError.classList.add('hidden');
+  bookingSuccess.classList.add('hidden');
+
+  if (currentMode === 'standard') {
+    standardSlotsContainer.classList.remove('hidden');
+    customTimeContainer.classList.add('hidden');
+    renderStandardSlots();
+  } else {
+    standardSlotsContainer.classList.add('hidden');
+    customTimeContainer.classList.remove('hidden');
+  }
+  
+  validateSelection();
+}
+
+function handleDateChange() {
+  renderBookings();
+  
+  if (!selectedDateString) {
+    sundayWarning.classList.add('hidden');
+    dateInput.classList.remove('is-sunday');
+    standardSlotsContainer.innerHTML = '';
+    validateSelection();
+    return;
+  }
+
+  const [year, month, day] = selectedDateString.split('-').map(Number);
+  const selectedDateObj = new Date(year, month - 1, day);
+
+  if (isSunday(selectedDateObj)) {
+    sundayWarning.classList.remove('hidden');
+    dateInput.classList.add('is-sunday');
+  } else {
+    sundayWarning.classList.add('hidden');
+    dateInput.classList.remove('is-sunday');
+  }
+
+  selectedTimeStandardSlotObj = null;
+  selectedTimeString = '';
+  if (currentMode === 'custom') customTimeInput.value = '';
+  
+  if (currentMode === 'standard') {
+    renderStandardSlots();
+  }
+  
+  validateSelection();
+}
+
+function renderStandardSlots() {
+  standardSlotsContainer.innerHTML = '';
+  if (!selectedDateString) return;
+
+  const [year, month, day] = selectedDateString.split('-').map(Number);
+  const selectedDateObj = new Date(year, month - 1, day);
+
+  const slots = generateTimeSlots(selectedDateObj);
+  const now = new Date();
+
+  slots.forEach(slotDate => {
+    const isAvailable = isSlotAvailable(slotDate, existingBookings, editingBookingId || undefined);
+    
+    let isPast = slotDate <= now;
+    if (editingBookingId) {
+      const existing = existingBookings.find(b => b.id === editingBookingId);
+      if (existing && new Date(existing.datetimeIso).getTime() === slotDate.getTime()) {
+        isPast = false;
+      }
+    }
+
+    const timeString = formatTime(slotDate);
+
+    const btn = document.createElement('button');
+    btn.className = 'slot-btn';
+    btn.textContent = timeString;
+    btn.disabled = !isAvailable || isPast;
+    
+    if (selectedTimeStandardSlotObj && selectedTimeStandardSlotObj.getTime() === slotDate.getTime()) {
+      btn.classList.add('selected');
+    }
+
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedTimeStandardSlotObj = slotDate;
+      validateSelection();
+      bookingError.classList.add('hidden');
+      bookingSuccess.classList.add('hidden');
+    });
+
+    standardSlotsContainer.appendChild(btn);
+  });
+}
+
+function validateSelection() {
+  let isValid = false;
+  const hasName = firstNameInput.value.trim().length > 0;
+  const hasLastName = lastNameInput.value.trim().length > 0;
+  const now = new Date();
+
+  // Reset any past time error
+  if (bookingError.textContent && bookingError.textContent.includes('past')) {
+    bookingError.classList.add('hidden');
+  }
+
+  if (selectedDateString && hasName && hasLastName) {
+    if (currentMode === 'standard' && selectedTimeStandardSlotObj) {
+      isValid = true;
+    } else if (currentMode === 'custom' && selectedTimeString) {
+      const [year, month, day] = selectedDateString.split('-').map(Number);
+      const [hours, minutes] = selectedTimeString.split(':').map(Number);
+      const finalDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
+      
+      let keepingPast = false;
+      if (editingBookingId) {
+         const existing = existingBookings.find(b => b.id === editingBookingId);
+         if (existing && new Date(existing.datetimeIso).getTime() === finalDateTime.getTime()) {
+           keepingPast = true;
+         }
+      }
+
+      if (finalDateTime < now && !keepingPast) {
+         bookingError.textContent = 'Cannot select a past custom time.';
+         bookingError.classList.remove('hidden');
+      } else {
+         isValid = true;
+      }
+    }
+  }
+  bookButton.disabled = !isValid;
+}
+
+function handleBooking() {
+  if (!currentUser) return;
+  bookingError.classList.add('hidden');
+  bookingSuccess.classList.add('hidden');
+
+  let finalDateTime: Date;
+
+  if (currentMode === 'standard' && selectedTimeStandardSlotObj) {
+    finalDateTime = selectedTimeStandardSlotObj;
+  } else if (currentMode === 'custom' && selectedTimeString && selectedDateString) {
+    const [year, month, day] = selectedDateString.split('-').map(Number);
+    const [hours, minutes] = selectedTimeString.split(':').map(Number);
+    finalDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  } else {
+    return;
+  }
+
+  if (!isSlotAvailable(finalDateTime, existingBookings, editingBookingId || undefined)) {
+    bookingError.textContent = 'Selected time is already booked. Please choose another time.';
+    bookingError.classList.remove('hidden');
+    return;
+  }
+
+  const fn = firstNameInput.value.trim();
+  const ln = lastNameInput.value.trim();
+  const phone = phoneInput.value.trim();
+
+  if (editingBookingId) {
+    // Update existing
+    const bookingIndex = existingBookings.findIndex(b => b.id === editingBookingId);
+    if (bookingIndex !== -1) {
+      existingBookings[bookingIndex] = {
+        ...existingBookings[bookingIndex],
+        datetimeIso: finalDateTime.toISOString(),
+        patientName: fn,
+        patientLastName: ln,
+        patientPhone: phone || undefined,
+        updatedBy: currentUser.username,
+        updatedAt: new Date().toISOString()
+      };
+      bookingSuccess.textContent = 'Appointment updated successfully!';
+    }
+    cancelEdit();
+  } else {
+    // Save New Booking
+    const newBooking: Booking = {
+      id: `booking-${Date.now()}`,
+      datetimeIso: finalDateTime.toISOString(),
+      patientName: fn,
+      patientLastName: ln,
+      patientPhone: phone || undefined,
+      createdBy: currentUser.username,
+      createdAt: new Date().toISOString()
+    };
+    existingBookings.push(newBooking);
+    bookingSuccess.textContent = 'Appointment saved successfully!';
+    
+    // Reset Form if not editing
+    if (currentMode === 'standard') {
+      selectedTimeStandardSlotObj = null;
+      renderStandardSlots(); 
+    } else {
+      customTimeInput.value = '';
+      selectedTimeString = '';
+    }
+    firstNameInput.value = '';
+    lastNameInput.value = '';
+    phoneInput.value = '';
+  }
+  
+  bookingSuccess.classList.remove('hidden');
+  validateSelection();
+  renderBookings();
+}
+
+function startEdit(id: string) {
+  const booking = existingBookings.find(b => b.id === id);
+  if (!booking) return;
+  
+  editingBookingId = booking.id;
+  firstNameInput.value = booking.patientName;
+  lastNameInput.value = booking.patientLastName;
+  phoneInput.value = booking.patientPhone || '';
+  
+  const d = new Date(booking.datetimeIso);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  
+  dateInput.value = `${year}-${month}-${day}`;
+  selectedDateString = dateInput.value;
+  
+  // Decide Mode and Select Time based on precision
+  const hours = d.getHours();
+  const mins = d.getMinutes();
+  const isStandard = (hours >= 17) && (mins % 15 === 0) && !isSunday(new Date(year, d.getMonth(), d.getDate()));
+
+  currentMode = isStandard ? 'standard' : 'custom';
+  (document.querySelector(`input[name="mode"][value="${currentMode}"]`) as HTMLInputElement).checked = true;
+  
+  handleModeChange();
+  handleDateChange();
+
+  if (currentMode === 'standard') {
+    selectedTimeStandardSlotObj = d;
+    renderStandardSlots();
+  } else {
+    selectedTimeString = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    customTimeInput.value = selectedTimeString;
+  }
+
+  // Update UI State
+  bookButton.textContent = 'Update Appointment';
+  formSubtitle.textContent = 'Edit existing appointment';
+  cancelEditBtn.classList.remove('hidden');
+  bookingSuccess.classList.add('hidden');
+  bookingError.classList.add('hidden');
+  
+  validateSelection();
+  
+  // scroll to top
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function cancelEdit() {
+  editingBookingId = null;
+  bookButton.textContent = 'Book Appointment';
+  formSubtitle.textContent = 'Select preferred date, time, and patient details';
+  cancelEditBtn.classList.add('hidden');
+  firstNameInput.value = '';
+  lastNameInput.value = '';
+  phoneInput.value = '';
+  
+  // Reset date to today
+  const today = new Date();
+  dateInput.value = today.toISOString().split('T')[0];
+  selectedDateString = dateInput.value;
+  
+  currentMode = 'standard';
+  (document.querySelector(`input[name="mode"][value="standard"]`) as HTMLInputElement).checked = true;
+  handleModeChange();
+  handleDateChange();
+}
+
+function renderBookings() {
+  bookingsList.innerHTML = '';
+  // Filter by selected date and sort ascending
+  const selectedDateBookings = existingBookings.filter(b => b.datetimeIso.startsWith(selectedDateString));
+  const sorted = [...selectedDateBookings].sort((a, b) => new Date(a.datetimeIso).getTime() - new Date(b.datetimeIso).getTime());
+  
+  sorted.forEach(b => {
+    const li = document.createElement('li');
+    li.className = 'booking-item';
+    
+    const d = new Date(b.datetimeIso);
+    const dateText = `${d.toLocaleDateString()} at ${formatTime(d)}`;
+    
+    let auditTrailHtml = `<div class="audit-trail">
+      <span>Added by <strong>${escapeHTML(b.createdBy)}</strong></span>`;
+    
+    if (b.updatedBy) {
+      auditTrailHtml += `<span>Last modified by <strong>${escapeHTML(b.updatedBy)}</strong></span>`;
+    }
+    auditTrailHtml += `</div>`;
+
+    li.innerHTML = `
+      <div class="booking-info">
+        <h4>${escapeHTML(b.patientName)} ${escapeHTML(b.patientLastName)} ${b.missed ? '<span style="color:var(--error-text);font-size:0.85rem;">(Missed)</span>' : ''}</h4>
+        ${b.patientPhone ? `<div class="patient-phone" style="font-size:0.9rem; color:var(--text-secondary); margin-bottom: 0.25rem;">📞 ${escapeHTML(b.patientPhone)}</div>` : ''}
+        <div class="datetime">${dateText}</div>
+        ${auditTrailHtml}
+      </div>
+      <div class="action-buttons">
+        <button class="mark-missed-btn" data-id="${b.id}">${b.missed ? 'Undo Missed' : 'Mark Missed'}</button>
+        <button class="edit-action-btn" data-id="${b.id}">Edit</button>
+      </div>
+    `;
+    
+    if (b.missed) {
+      li.classList.add('missed-appointment');
+    }
+    
+    bookingsList.appendChild(li);
+  });
+
+  // Attach edit listeners
+  document.querySelectorAll('.edit-action-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const id = (e.currentTarget as HTMLButtonElement).getAttribute('data-id');
+      if (id) startEdit(id);
+    });
+  });
+
+  // Attach mark missed listeners
+  document.querySelectorAll('.mark-missed-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const id = (e.currentTarget as HTMLButtonElement).getAttribute('data-id');
+      if (id) toggleMissed(id);
+    });
+  });
+}
+
+function toggleMissed(id: string) {
+  const booking = existingBookings.find(b => b.id === id);
+  if (!booking) return;
+  booking.missed = !booking.missed;
+  if (currentUser) {
+    booking.updatedBy = currentUser.username;
+    booking.updatedAt = new Date().toISOString();
+  }
+  renderBookings();
+}
+
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+// Start
+document.addEventListener('DOMContentLoaded', init);
