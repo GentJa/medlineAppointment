@@ -114,8 +114,16 @@ function init() {
     }
   });
   
-  notificationCheckbox.addEventListener('change', (e) => {
+  notificationCheckbox.addEventListener('change', async (e) => {
     notificationsEnabled = (e.target as HTMLInputElement).checked;
+    if (notificationsEnabled && "Notification" in window && Notification.permission !== "granted") {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        notificationsEnabled = false;
+        notificationCheckbox.checked = false;
+        alert("System notifications were blocked. Please enable them in your browser settings to stay updated!");
+      }
+    }
     if (currentUser) {
       localStorage.setItem(`notify_${currentUser.id}`, String(notificationsEnabled));
     }
@@ -150,6 +158,8 @@ function init() {
 
 function showNotification(message: string) {
   if (!notificationsEnabled) return;
+
+  // 1. Show UI Toast (Foreground)
   const toast = document.createElement('div');
   toast.className = 'toast-notification';
   toast.innerHTML = `<span>🔔</span> <span>${message}</span>`;
@@ -161,6 +171,20 @@ function showNotification(message: string) {
     toast.style.transition = 'all 0.3s ease';
     setTimeout(() => toast.remove(), 300);
   }, 6000);
+
+  // 2. Show System Notification (Background)
+  if ("Notification" in window && Notification.permission === "granted") {
+    try {
+      new Notification("Medline Appointment", {
+        body: message,
+        icon: "/pwa-192x192.png", // Path from manifest
+        badge: "/favicon.svg",
+        tag: "appointment-reminder" // Group similar notifications
+      });
+    } catch (e) {
+      console.warn("Failed to show system notification:", e);
+    }
+  }
 }
 
 function checkUpcomingAppointments() {
