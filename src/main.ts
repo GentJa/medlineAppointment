@@ -8,7 +8,8 @@ if ('serviceWorker' in navigator) {
 }
 
 // Mock Firestore / Database equivalent
-let existingBookings: Booking[] = [
+const SAVED_BOOKINGS = localStorage.getItem('medline_bookings');
+let existingBookings: Booking[] = SAVED_BOOKINGS ? JSON.parse(SAVED_BOOKINGS) : [
   {
     id: 'mock-1',
     datetimeIso: new Date(new Date().setHours(17, 30, 0, 0)).toISOString(),
@@ -18,6 +19,10 @@ let existingBookings: Booking[] = [
     createdAt: new Date(Date.now() - 86400000).toISOString()
   }
 ];
+
+function saveBookings() {
+  localStorage.setItem('medline_bookings', JSON.stringify(existingBookings));
+}
 
 // State
 let currentUser: User | null = null;
@@ -68,6 +73,17 @@ function init() {
   
   handleDateChange();
 
+  // Restore Session
+  const savedUser = localStorage.getItem('medline_user');
+  if (savedUser) {
+    try {
+      const user = JSON.parse(savedUser);
+      loginUser(user);
+    } catch (e) {
+      localStorage.removeItem('medline_user');
+    }
+  }
+
   // Attach Event Listeners
   loginForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -91,6 +107,7 @@ function init() {
     if (currentUser?.role === 'admin') {
       if (confirm('Are you sure you want to delete all appointments? This action cannot be undone.')) {
         existingBookings = [];
+        saveBookings();
         renderBookings();
         showNotification('All appointments have been deleted.');
       }
@@ -166,6 +183,7 @@ function checkUpcomingAppointments() {
 
 function loginUser(user: User) {
   currentUser = user;
+  localStorage.setItem('medline_user', JSON.stringify(user));
   currentUserDisplay.textContent = `(${user.username})`;
   
   const savedPref = localStorage.getItem(`notify_${user.id}`);
@@ -188,6 +206,7 @@ function loginUser(user: User) {
 
 function logoutUser() {
   currentUser = null;
+  localStorage.removeItem('medline_user');
   appMain.classList.add('hidden');
   loginModal.classList.remove('hidden');
   usernameInput.value = '';
@@ -404,6 +423,7 @@ function handleBooking() {
     phoneInput.value = '';
   }
   
+  saveBookings();
   bookingSuccess.classList.remove('hidden');
   validateSelection();
   renderBookings();
@@ -544,6 +564,7 @@ function toggleMissed(id: string) {
     booking.updatedBy = currentUser.username;
     booking.updatedAt = new Date().toISOString();
   }
+  saveBookings();
   renderBookings();
 }
 
