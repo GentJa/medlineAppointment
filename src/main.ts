@@ -1,4 +1,5 @@
 import { generateTimeSlots, isSlotAvailable, isSunday, authenticateUser, escapeHTML, type Booking, type User } from './logic';
+import { supabase } from './supabase';
 
 // @ts-ignore
 import { registerSW } from 'virtual:pwa-register';
@@ -7,30 +8,15 @@ if ('serviceWorker' in navigator) {
   registerSW({ immediate: true });
 }
 
-// Mock Firestore / Database equivalent
-const SAVED_BOOKINGS = localStorage.getItem('medline_bookings');
-let existingBookings: Booking[] = SAVED_BOOKINGS ? JSON.parse(SAVED_BOOKINGS) : [
-  {
-    id: 'mock-1',
-    datetimeIso: new Date(new Date().setHours(17, 30, 0, 0)).toISOString(),
-    patientName: 'Jane',
-    patientLastName: 'Doe',
-    createdBy: 'Admin Gent',
-    createdAt: new Date(Date.now() - 86400000).toISOString()
-  }
-];
-
-function saveBookings() {
-  localStorage.setItem('medline_bookings', JSON.stringify(existingBookings));
-}
-
-// State
+// Global State
+let existingBookings: Booking[] = [];
 let currentUser: User | null = null;
 let currentMode: 'standard' | 'custom' = 'standard';
 let selectedDateString: string = '';
-let selectedTimeString: string = ''; // Format HH:mm for custom, or full date string for standard selected slot 
+let selectedTimeString: string = ''; 
 let selectedTimeStandardSlotObj: Date | null = null;
 let editingBookingId: string | null = null;
+let notificationsEnabled = true;
 
 // DOM Elements
 const loginModal = document.getElementById('login-modal') as HTMLDivElement;
@@ -42,6 +28,8 @@ const passwordInput = document.getElementById('password-input') as HTMLInputElem
 const loginError = document.getElementById('login-error') as HTMLDivElement;
 const logoutBtn = document.getElementById('logout-btn') as HTMLButtonElement;
 const deleteAllBtn = document.getElementById('delete-all-btn') as HTMLButtonElement;
+const notificationCheckbox = document.getElementById('notification-checkbox') as HTMLInputElement;
+const notificationsContainer = document.getElementById('notifications-container') as HTMLDivElement;
 
 const modeRadios = document.querySelectorAll<HTMLInputElement>('input[name="mode"]');
 const firstNameInput = document.getElementById('first-name-input') as HTMLInputElement;
@@ -100,13 +88,25 @@ function init() {
 
   logoutBtn.addEventListener('click', logoutUser);
   
-  deleteAllBtn.addEventListener('click', () => {
+  deleteAllBtn.addEventListener('click', async () => {
     if (currentUser?.role === 'admin') {
       if (confirm('Are you sure you want to delete all appointments? This action cannot be undone.')) {
-        existingBookings = [];
-        saveBookings();
-        renderBookings();
+        const { error } = await supabase.from('bookings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (error) {
+           showNotification('Error deleting appointments.');
+        } else {
+           existingBookings = [];
+           renderBookings();
+           showNotification('All appointments have been deleted.');
+        }
       }
+    }
+  });
+
+  notificationCheckbox.addEventListener('change', (e) => {
+    notificationsEnabled = (e.target as HTMLInputElement).checked;
+    if (currentUser) {
+      localStorage.setItem(`notify_${currentUser.id}`, String(notificationsEnabled));
     }
   });
 
@@ -132,13 +132,67 @@ function init() {
 
   bookButton.addEventListener('click', handleBooking);
   cancelEditBtn.addEventListener('click', cancelEdit);
+
+  // Periodic check
+  setInterval(checkUpcomingAppointments, 15000);
+}
+
+// Supabase Logic
+async function fetchBookings() {
+   const { data, error } = await supabase
+     .from('bookings')
+     .select('*');
+   
+   if (error) {
+     console.error('Error fetching bookings:', error);
+     return;
+   }
+   existingBookings = data || [];
+   renderBookings();
+   renderStandardSlots(); 
+}
+
+function showNotification(message: string) {
+  if (!notificationsEnabled) return;
+  const toast = document.createElement('div');
+  toast.className = 'toast-notification';
+  toast.innerHTML = `<span>🔔</span> <span>${message}</span>`;
+  notificationsContainer.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(10px) scale(0.95)';
+    toast.style.transition = 'all 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 6000);
+}
+
+function checkUpcomingAppointments() {
+  if (!notificationsEnabled) return;
+  const now = new Date();
+  
+  existingBookings.forEach(b => {
+    if (b.missed || b.notified) return;
+    
+    const bDate = new Date(b.datetimeIso);
+    const diffMs = bDate.getTime() - now.getTime();
+    
+    if (diffMs > 0 && diffMs <= 5 * 60000) {
+      showNotification(`${b.patientName} ${b.patientLastName} is arriving soon!`);
+      b.notified = true;
+      supabase.from('bookings').update({ notified: true }).eq('id', b.id).then();
+    }
+  });
 }
 
 function loginUser(user: User) {
   currentUser = user;
-  localStorage.setItem('medline_user', JSON.stringify(user));
   currentUserDisplay.textContent = `(${user.username})`;
   
+  const savedPref = localStorage.getItem(`notify_${user.id}`);
+  notificationsEnabled = savedPref === null ? true : savedPref === 'true';
+  notificationCheckbox.checked = notificationsEnabled;
+
   if (currentUser.role === 'admin') {
     deleteAllBtn.classList.remove('hidden');
   } else {
@@ -146,22 +200,20 @@ function loginUser(user: User) {
   }
 
   loginModal.style.opacity = '0';
-  setTimeout(() => {
+  setTimeout(async () => {
     loginModal.classList.add('hidden');
     appMain.classList.remove('hidden');
-    renderBookings();
+    await fetchBookings();
   }, 300);
 }
 
 function logoutUser() {
   currentUser = null;
-  localStorage.removeItem('medline_user');
   appMain.classList.add('hidden');
   loginModal.classList.remove('hidden');
   usernameInput.value = '';
   passwordInput.value = '';
   loginError.classList.add('hidden');
-  // trigger reflow
   void loginModal.offsetWidth;
   loginModal.style.opacity = '1';
   cancelEdit();
@@ -270,8 +322,7 @@ function validateSelection() {
   const hasLastName = lastNameInput.value.trim().length > 0;
   const now = new Date();
 
-  // Reset any past time error
-  if (bookingError.textContent && bookingError.textContent.includes('past')) {
+  if (bookingError.textContent && (bookingError.textContent.includes('past') || bookingError.textContent.includes('booked'))) {
     bookingError.classList.add('hidden');
   }
 
@@ -302,10 +353,11 @@ function validateSelection() {
   bookButton.disabled = !isValid;
 }
 
-function handleBooking() {
+async function handleBooking() {
   if (!currentUser) return;
   bookingError.classList.add('hidden');
   bookingSuccess.classList.add('hidden');
+  bookButton.disabled = true;
 
   let finalDateTime: Date;
 
@@ -316,12 +368,7 @@ function handleBooking() {
     const [hours, minutes] = selectedTimeString.split(':').map(Number);
     finalDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
   } else {
-    return;
-  }
-
-  if (!isSlotAvailable(finalDateTime, existingBookings, editingBookingId || undefined)) {
-    bookingError.textContent = 'Selected time is already booked. Please choose another time.';
-    bookingError.classList.remove('hidden');
+    bookButton.disabled = false;
     return;
   }
 
@@ -329,53 +376,60 @@ function handleBooking() {
   const ln = lastNameInput.value.trim();
   const phone = phoneInput.value.trim();
 
-  if (editingBookingId) {
-    // Update existing
-    const bookingIndex = existingBookings.findIndex(b => b.id === editingBookingId);
-    if (bookingIndex !== -1) {
-      existingBookings[bookingIndex] = {
-        ...existingBookings[bookingIndex],
-        datetimeIso: finalDateTime.toISOString(),
-        patientName: fn,
-        patientLastName: ln,
-        patientPhone: phone || undefined,
-        updatedBy: currentUser.username,
-        updatedAt: new Date().toISOString()
-      };
+  try {
+    if (editingBookingId) {
+      const { error } = await supabase
+        .from('bookings')
+        .update({
+          datetimeIso: finalDateTime.toISOString(),
+          patientName: fn,
+          patientLastName: ln,
+          patientPhone: phone || null,
+          updatedBy: currentUser.username,
+          updatedAt: new Date().toISOString()
+        })
+        .eq('id', editingBookingId);
+
+      if (error) throw error;
       bookingSuccess.textContent = 'Appointment updated successfully!';
-    }
-    cancelEdit();
-  } else {
-    // Save New Booking
-    const newBooking: Booking = {
-      id: `booking-${Date.now()}`,
-      datetimeIso: finalDateTime.toISOString(),
-      patientName: fn,
-      patientLastName: ln,
-      patientPhone: phone || undefined,
-      createdBy: currentUser.username,
-      createdAt: new Date().toISOString()
-    };
-    existingBookings.push(newBooking);
-    bookingSuccess.textContent = 'Appointment saved successfully!';
-    
-    // Reset Form if not editing
-    if (currentMode === 'standard') {
-      selectedTimeStandardSlotObj = null;
-      renderStandardSlots(); 
+      cancelEdit();
     } else {
-      customTimeInput.value = '';
-      selectedTimeString = '';
+      const { error } = await supabase
+        .from('bookings')
+        .insert([{
+          datetimeIso: finalDateTime.toISOString(),
+          patientName: fn,
+          patientLastName: ln,
+          patientPhone: phone || null,
+          createdBy: currentUser.username,
+          createdAt: new Date().toISOString()
+        }]);
+
+      if (error) throw error;
+      bookingSuccess.textContent = 'Appointment saved successfully!';
+      
+      if (currentMode === 'standard') {
+        selectedTimeStandardSlotObj = null;
+        renderStandardSlots(); 
+      } else {
+        customTimeInput.value = '';
+        selectedTimeString = '';
+      }
+      firstNameInput.value = '';
+      lastNameInput.value = '';
+      phoneInput.value = '';
     }
-    firstNameInput.value = '';
-    lastNameInput.value = '';
-    phoneInput.value = '';
+    
+    await fetchBookings();
+    bookingSuccess.classList.remove('hidden');
+  } catch (err: any) {
+    console.error('Booking error:', err);
+    bookingError.textContent = 'Failed to save appointment. Please try again.';
+    bookingError.classList.remove('hidden');
+  } finally {
+    bookButton.disabled = false;
+    validateSelection();
   }
-  
-  saveBookings();
-  bookingSuccess.classList.remove('hidden');
-  validateSelection();
-  renderBookings();
 }
 
 function startEdit(id: string) {
@@ -505,16 +559,21 @@ function renderBookings() {
   });
 }
 
-function toggleMissed(id: string) {
+async function toggleMissed(id: string) {
   const booking = existingBookings.find(b => b.id === id);
   if (!booking) return;
-  booking.missed = !booking.missed;
+  const newMissed = !booking.missed;
+  
+  const updateData: any = { missed: newMissed };
   if (currentUser) {
-    booking.updatedBy = currentUser.username;
-    booking.updatedAt = new Date().toISOString();
+    updateData.updatedBy = currentUser.username;
+    updateData.updatedAt = new Date().toISOString();
   }
-  saveBookings();
-  renderBookings();
+
+  const { error } = await supabase.from('bookings').update(updateData).eq('id', id);
+  if (!error) {
+    await fetchBookings();
+  }
 }
 
 function formatTime(date: Date): string {

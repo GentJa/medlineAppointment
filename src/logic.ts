@@ -5,8 +5,8 @@ export interface User {
 }
 
 export interface Booking {
-  id: string;
-  datetimeIso: string; // Storing ISO string which perfectly mimics UTC Firestore Timestamp
+  id: string; // UUID in Supabase
+  datetimeIso: string; 
   
   // Patient Info
   patientName: string;
@@ -14,13 +14,14 @@ export interface Booking {
   patientPhone?: string;
 
   // Audit Trail
-  createdBy: string; // User ID / Username of author
-  createdAt: string; // ISO string of when it was added
-  updatedBy?: string; // User ID / Username of modifier
-  updatedAt?: string; // ISO string of modification time
+  createdBy: string; 
+  createdAt: string; 
+  updatedBy?: string; 
+  updatedAt?: string; 
 
   // Status flags
   missed?: boolean;
+  notified?: boolean;
 }
 
 /**
