@@ -372,6 +372,22 @@ body {
   background: white;
 }
 
+.mark-checked-btn {
+  border: 1px solid var(--success-border);
+  color: var(--success-text);
+  background: white;
+}
+
+.checked-appointment {
+  background-color: var(--success-bg) !important;
+  border-left-color: var(--success-border) !important;
+}
+
+.missed-appointment {
+  background-color: var(--error-bg);
+  border-left-color: var(--error-border);
+}
+
 /* Desktop Responsiveness - Enhancements */
 @media (min-width: 600px) {
   body { padding: 2rem; align-items: center; }

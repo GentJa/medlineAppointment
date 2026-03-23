@@ -568,6 +568,7 @@ function renderBookings() {
         ${auditTrailHtml}
       </div>
       <div class="action-buttons">
+        <button class="mark-checked-btn" data-id="${b.id}">${b.checked ? 'Uncheck' : 'Check'}</button>
         <button class="mark-missed-btn" data-id="${b.id}">${b.missed ? 'Undo Missed' : 'Mark Missed'}</button>
         <button class="edit-action-btn" data-id="${b.id}">Edit</button>
       </div>
@@ -575,6 +576,10 @@ function renderBookings() {
     
     if (b.missed) {
       li.classList.add('missed-appointment');
+    }
+
+    if (b.checked) {
+      li.classList.add('checked-appointment');
     }
     
     bookingsList.appendChild(li);
@@ -595,6 +600,33 @@ function renderBookings() {
       if (id) toggleMissed(id);
     });
   });
+
+  // Attach mark checked listeners
+  document.querySelectorAll('.mark-checked-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const id = (e.currentTarget as HTMLButtonElement).getAttribute('data-id');
+      if (id) toggleChecked(id);
+    });
+  });
+}
+
+async function toggleChecked(id: string) {
+  const booking = existingBookings.find(b => b.id === id);
+  if (!booking) return;
+  const newChecked = !booking.checked;
+  
+  const updateData: any = { checked: newChecked };
+  if (currentUser) {
+    updateData.updated_by = currentUser.username;
+    updateData.updated_at = new Date().toISOString();
+  }
+
+  const { error } = await supabase.from('bookings').update(updateData).eq('id', id);
+  if (!error) {
+    // Realtime will handle the update
+  } else {
+    showNotification(`Error: ${error.message}`);
+  }
 }
 
 async function toggleMissed(id: string) {

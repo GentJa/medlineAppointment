@@ -11,7 +11,8 @@ CREATE TABLE bookings (
   updated_by TEXT,
   updated_at TIMESTAMPTZ,
   missed BOOLEAN DEFAULT FALSE,
-  notified BOOLEAN DEFAULT FALSE
+  notified BOOLEAN DEFAULT FALSE,
+  checked BOOLEAN DEFAULT FALSE
 );
 
 
