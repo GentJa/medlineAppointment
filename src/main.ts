@@ -44,6 +44,12 @@ const bookingSuccess = document.getElementById('booking-success') as HTMLDivElem
 const bookingsList = document.getElementById('bookings-list') as HTMLUListElement;
 const formSubtitle = document.getElementById('form-subtitle') as HTMLParagraphElement;
 
+// Tab Elements
+const showNewTab = document.getElementById('show-new-tab') as HTMLButtonElement;
+const showListTab = document.getElementById('show-list-tab') as HTMLButtonElement;
+const newAppointmentSection = document.getElementById('new-appointment-section') as HTMLElement;
+const bookingsListSection = document.getElementById('bookings-list-section') as HTMLElement;
+
 // Initialization
 function init() {
   const today = new Date();
@@ -89,10 +95,10 @@ function init() {
     if (currentUser?.role === 'admin') {
       if (confirm('Are you sure you want to delete all appointments? This action cannot be undone.')) {
         const { error } = await supabase.from('bookings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-         } else {
-            existingBookings = [];
-            renderBookings();
-         }
+        if (!error) {
+           existingBookings = [];
+           renderBookings();
+        }
       }
     }
   });
@@ -121,6 +127,9 @@ function init() {
   bookButton.addEventListener('click', handleBooking);
   cancelEditBtn.addEventListener('click', cancelEdit);
 
+  showNewTab.addEventListener('click', () => switchTab('new'));
+  showListTab.addEventListener('click', () => switchTab('list'));
+
   // Setup Realtime Sync
   setupRealtime();
 }
@@ -141,6 +150,21 @@ function setupRealtime() {
       }
     )
     .subscribe();
+}
+
+function switchTab(tab: 'new' | 'list') {
+  if (tab === 'new') {
+    showNewTab.classList.add('active');
+    showListTab.classList.remove('active');
+    newAppointmentSection.classList.remove('hidden');
+    bookingsListSection.classList.add('hidden');
+  } else {
+    showNewTab.classList.remove('active');
+    showListTab.classList.add('active');
+    newAppointmentSection.classList.add('hidden');
+    bookingsListSection.classList.remove('hidden');
+    fetchBookings();
+  }
 }
 
 // Supabase Logic
@@ -382,23 +406,23 @@ async function handleBooking() {
         })
         .eq('id', editingBookingId);
 
-      if (error) throw error;
-      bookingSuccess.textContent = 'Appointment updated successfully!';
-      cancelEdit();
-    } else {
-      const { error } = await supabase
-        .from('bookings')
-        .insert([{
-          datetime_iso: finalDateTime.toISOString(),
-          patient_name: fn,
-          patient_last_name: ln,
-          patient_phone: phone || null,
-          created_by: currentUser.username,
-          created_at: new Date().toISOString()
-        }]);
+    if (error) throw error;
+    bookingSuccess.textContent = 'Appointment updated successfully!';
+    cancelEdit();
+} else {
+    const { error } = await supabase
+    .from('bookings')
+    .insert([{
+        datetime_iso: finalDateTime.toISOString(),
+        patient_name: fn,
+        patient_last_name: ln,
+        patient_phone: phone || null,
+        created_by: currentUser.username,
+        created_at: new Date().toISOString()
+    }]);
 
-      if (error) throw error;
-      bookingSuccess.textContent = 'Appointment saved successfully!';
+    if (error) throw error;
+    bookingSuccess.textContent = 'Appointment saved successfully!';
       
       if (currentMode === 'standard') {
         selectedTimeStandardSlotObj = null;
@@ -584,8 +608,6 @@ async function toggleChecked(id: string) {
   const { error } = await supabase.from('bookings').update(updateData).eq('id', id);
   if (!error) {
     // Realtime will handle the update
-  } else {
-    showNotification(`Error: ${error.message}`);
   }
 }
 

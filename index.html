@@ -55,79 +55,88 @@
       <p class="subtitle" id="form-subtitle">Select preferred date, time, and patient details</p>
     </header>
 
-    <section class="mode-selector">
-      <label class="mode-label">
-        <input type="radio" name="mode" value="standard" checked />
-        <span class="mode-button">Standard Mode</span>
-      </label>
-      <label class="mode-label">
-        <input type="radio" name="mode" value="custom" />
-        <span class="mode-button">Custom Mode</span>
-      </label>
+    <nav class="nav-tabs">
+      <button id="show-new-tab" class="tab-btn active">New Appointment</button>
+      <button id="show-list-tab" class="tab-btn">Existing Bookings</button>
+    </nav>
+
+    <section id="new-appointment-section" class="tab-content">
+      <section class="appointment-form">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="first-name-input">First Name</label>
+            <input type="text" id="first-name-input" class="modern-input" placeholder="e.g. John" required
+              maxlength="50" />
+          </div>
+          <div class="form-group flex-1">
+            <label for="last-name-input">Last Name</label>
+            <input type="text" id="last-name-input" class="modern-input" placeholder="e.g. Doe" required maxlength="50" />
+          </div>
+          <div class="form-group flex-1">
+            <label for="phone-input">Phone Number</label>
+            <input type="tel" id="phone-input" class="modern-input" placeholder="Optional" maxlength="20" />
+          </div>
+        </div>
+
+        <section class="mode-selector">
+          <label class="mode-label">
+            <input type="radio" name="mode" value="standard" checked />
+            <span class="mode-button">Standard Mode</span>
+          </label>
+          <label class="mode-label">
+            <input type="radio" name="mode" value="custom" />
+            <span class="mode-button">Custom Mode</span>
+          </label>
+        </section>
+
+        <div class="form-group date-picker-group">
+          <label for="date-input">Select Date</label>
+          <input type="date" id="date-input" class="modern-input" required />
+          <div id="sunday-warning" class="warning-banner hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="warning-icon">
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            This is outside regular working days. Continue?
+          </div>
+        </div>
+
+        <div class="form-group time-picker-group">
+          <label for="time-selection">Select Time</label>
+
+          <!-- Standard Mode Grid -->
+          <div id="standard-slots-container" class="slots-grid">
+            <!-- Slots will be generated here -->
+          </div>
+
+          <!-- Custom Mode Input -->
+          <div id="custom-time-container" class="custom-time-wrapper hidden">
+            <input type="time" id="custom-time-input" class="modern-input" />
+          </div>
+        </div>
+
+        <div id="booking-error" class="error-banner hidden">
+          Selected time is already booked. Please choose another time.
+        </div>
+
+        <div id="booking-success" class="success-banner hidden">
+          Appointment saved successfully!
+        </div>
+
+        <div class="form-actions">
+          <button id="cancel-edit-btn" class="cancel-btn hidden">Cancel Edit</button>
+          <button id="book-button" class="book-btn" disabled>Book Appointment</button>
+        </div>
+      </section>
     </section>
 
-    <section class="appointment-form">
-      <div class="form-row">
-        <div class="form-group flex-1">
-          <label for="first-name-input">First Name</label>
-          <input type="text" id="first-name-input" class="modern-input" placeholder="e.g. John" required
-            maxlength="50" />
-        </div>
-        <div class="form-group flex-1">
-          <label for="last-name-input">Last Name</label>
-          <input type="text" id="last-name-input" class="modern-input" placeholder="e.g. Doe" required maxlength="50" />
-        </div>
-        <div class="form-group flex-1">
-          <label for="phone-input">Phone Number</label>
-          <input type="tel" id="phone-input" class="modern-input" placeholder="Optional" maxlength="20" />
-        </div>
+    <section id="bookings-list-section" class="tab-content hidden">
+      <div class="booked-appointments">
+        <h2>Existing Bookings</h2>
+        <ul id="bookings-list"></ul>
       </div>
-
-      <div class="form-group date-picker-group">
-        <label for="date-input">Select Date</label>
-        <input type="date" id="date-input" class="modern-input" required />
-        <div id="sunday-warning" class="warning-banner hidden">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="warning-icon">
-            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-            <line x1="12" y1="9" x2="12" y2="13" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
-          </svg>
-          This is outside regular working days. Continue?
-        </div>
-      </div>
-
-      <div class="form-group time-picker-group">
-        <label for="time-selection">Select Time</label>
-
-        <!-- Standard Mode Grid -->
-        <div id="standard-slots-container" class="slots-grid">
-          <!-- Slots will be generated here -->
-        </div>
-
-        <!-- Custom Mode Input -->
-        <div id="custom-time-container" class="custom-time-wrapper hidden">
-          <input type="time" id="custom-time-input" class="modern-input" />
-        </div>
-      </div>
-
-      <div id="booking-error" class="error-banner hidden">
-        Selected time is already booked. Please choose another time.
-      </div>
-
-      <div id="booking-success" class="success-banner hidden">
-        Appointment saved successfully!
-      </div>
-
-      <div class="form-actions">
-        <button id="cancel-edit-btn" class="cancel-btn hidden">Cancel Edit</button>
-        <button id="book-button" class="book-btn" disabled>Book Appointment</button>
-      </div>
-    </section>
-
-    <section class="booked-appointments">
-      <h2>Existing Bookings</h2>
-      <ul id="bookings-list"></ul>
     </section>
   </main>
 
