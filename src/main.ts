@@ -531,6 +531,12 @@ function renderBookings() {
   const selectedDateBookings = existingBookings.filter(b => b.datetime_iso.startsWith(selectedDateString));
   const sorted = [...selectedDateBookings].sort((a, b) => new Date(a.datetime_iso).getTime() - new Date(b.datetime_iso).getTime());
   
+  // Update Header Count
+  const listTitle = document.getElementById('bookings-list-title');
+  if (listTitle) {
+      listTitle.textContent = `Existing Bookings ( ${selectedDateBookings.length} )`;
+  }
+
   sorted.forEach(b => {
     const li = document.createElement('li');
     li.className = 'booking-item';
