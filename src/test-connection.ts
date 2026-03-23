@@ -5,7 +5,8 @@ async function testConnection() {
   console.log('Checking connection...');
 
   try {
-    const { data, error } = await supabase.from('bookings').select('id').limit(1);
+    const { error } = await supabase.from('bookings').select('id').limit(1);
+
 
     if (error) {
       if (error.code === 'PGRST205') {
