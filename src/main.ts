@@ -145,8 +145,10 @@ async function fetchBookings() {
    
    if (error) {
      console.error('Error fetching bookings:', error);
+     showNotification(`Database Error: ${error.message}`);
      return;
    }
+
    existingBookings = data || [];
    renderBookings();
    renderStandardSlots(); 
@@ -424,9 +426,10 @@ async function handleBooking() {
     bookingSuccess.classList.remove('hidden');
   } catch (err: any) {
     console.error('Booking error:', err);
-    bookingError.textContent = 'Failed to save appointment. Please try again.';
+    bookingError.textContent = `Error: ${err.message || 'Failed to save appointment. Please try again.'}`;
     bookingError.classList.remove('hidden');
   } finally {
+
     bookButton.disabled = false;
     validateSelection();
   }
