@@ -133,8 +133,29 @@ function init() {
   bookButton.addEventListener('click', handleBooking);
   cancelEditBtn.addEventListener('click', cancelEdit);
 
+  // Setup Realtime Sync
+  setupRealtime();
+
   // Periodic check
   setInterval(checkUpcomingAppointments, 15000);
+}
+
+function setupRealtime() {
+  supabase
+    .channel('schema-db-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'bookings'
+      },
+      (payload: any) => {
+        console.log('Realtime change received:', payload);
+        fetchBookings();
+      }
+    )
+    .subscribe();
 }
 
 // Supabase Logic
@@ -196,6 +217,7 @@ function checkUpcomingAppointments() {
 
 function loginUser(user: User) {
   currentUser = user;
+  localStorage.setItem('medline_user', JSON.stringify(user));
   currentUserDisplay.textContent = `(${user.username})`;
   
   const savedPref = localStorage.getItem(`notify_${user.id}`);
@@ -218,6 +240,7 @@ function loginUser(user: User) {
 
 function logoutUser() {
   currentUser = null;
+  localStorage.removeItem('medline_user');
   appMain.classList.add('hidden');
   loginModal.classList.remove('hidden');
   usernameInput.value = '';
