@@ -17,9 +17,9 @@
   --error-text: #b91c1c;
   --error-border: #fecaca;
 
-  --success-bg: #f0fdf4;
-  --success-text: #15803d;
-  --success-border: #bbf7d0;
+  --success-bg: #ecfdf5;
+  --success-text: #059669;
+  --success-border: #a7f3d0;
 
   --sunday-color: #ef4444; 
 }
@@ -306,11 +306,20 @@ body {
 .slot-badge {
   background-color: var(--primary-color);
   color: white;
-  font-size: 0.65rem;
-  padding: 1px 4px;
-  border-radius: 4px;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 99px;
   font-weight: 700;
-  min-width: 14px;
+  min-width: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.slot-btn.has-multiple {
+  border: 2px solid var(--primary-color);
+  background-color: rgba(99, 102, 241, 0.05);
 }
 
 .slot-btn.selected .slot-badge {
@@ -439,15 +448,26 @@ body {
   background: white;
 }
 
-.checked-appointment {
-  background-color: var(--success-bg) !important;
-  border-left-color: var(--success-border) !important;
+.status-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-left: 0.5rem;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
-.missed-appointment {
-  background-color: var(--error-bg);
-  border-left-color: var(--error-border);
+.checked-label {
+  color: var(--success-text);
+  background-color: var(--success-bg);
 }
+
+.missed-label {
+  color: var(--error-text);
+  background-color: var(--error-bg);
+}
+
+
+
 
 /* Desktop Responsiveness - Enhancements */
 @media (min-width: 600px) {
@@ -492,5 +512,7 @@ body {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+
 
 

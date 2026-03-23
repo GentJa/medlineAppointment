@@ -176,9 +176,9 @@ async function fetchBookings() {
    if (error) {
      console.error('Error fetching bookings:', error);
      if (error.code === 'PGRST205') {
-       showNotification(`Database Error: Table "bookings" is missing! Please run the SQL in src/schema.sql in your Supabase Editor.`);
+       alert(`Database Error: Table "bookings" is missing! Please run the SQL in src/schema.sql in your Supabase Editor.`);
      } else {
-       showNotification(`Database Error: ${error.message}`);
+       alert(`Database Error: ${error.message}`);
      }
      return;
    }
@@ -294,13 +294,15 @@ function renderStandardSlots() {
     }
 
     const timeString = formatTime(slotDate);
-    const isoString = slotDate.toISOString();
     
-    // Count bookings for this slot
-    const countForSlot = existingBookings.filter(b => b.datetime_iso === isoString).length;
+    // Count bookings for this slot using getTime() for robustness
+    const countForSlot = existingBookings.filter(b => new Date(b.datetime_iso).getTime() === slotDate.getTime()).length;
 
     const btn = document.createElement('button');
     btn.className = 'slot-btn';
+    if (countForSlot > 1) {
+      btn.classList.add('has-multiple');
+    }
     
     const timeSpan = document.createElement('span');
     timeSpan.textContent = timeString;
@@ -546,7 +548,10 @@ function renderBookings() {
 
     li.innerHTML = `
       <div class="booking-info">
-        <h4>${escapeHTML(b.patient_name)} ${escapeHTML(b.patient_last_name)} ${b.missed ? '<span style="color:var(--error-text);font-size:0.85rem;">(Missed)</span>' : ''}</h4>
+        <h4>${escapeHTML(b.patient_name)} ${escapeHTML(b.patient_last_name)} 
+          ${b.checked ? '<span class="status-label checked-label">(checked)</span>' : ''}
+          ${b.missed ? '<span class="status-label missed-label">(missed)</span>' : ''}
+        </h4>
         ${b.patient_phone ? `<div class="patient_phone" style="font-size:0.9rem; color:var(--text-secondary); margin-bottom: 0.25rem;">📞 ${escapeHTML(b.patient_phone)}</div>` : ''}
         <div class="datetime">${dateText}</div>
         ${auditTrailHtml}
@@ -557,14 +562,6 @@ function renderBookings() {
         <button class="edit-action-btn" data-id="${b.id}">Edit</button>
       </div>
     `;
-    
-    if (b.missed) {
-      li.classList.add('missed-appointment');
-    }
-
-    if (b.checked) {
-      li.classList.add('checked-appointment');
-    }
     
     bookingsList.appendChild(li);
   });
@@ -599,7 +596,7 @@ async function toggleChecked(id: string) {
   if (!booking) return;
   const newChecked = !booking.checked;
   
-  const updateData: any = { checked: newChecked };
+  const updateData: any = { checked: newChecked, missed: false }; // Clear missed if checking
   if (currentUser) {
     updateData.updated_by = currentUser.username;
     updateData.updated_at = new Date().toISOString();
@@ -607,7 +604,13 @@ async function toggleChecked(id: string) {
 
   const { error } = await supabase.from('bookings').update(updateData).eq('id', id);
   if (!error) {
-    // Realtime will handle the update
+    booking.checked = newChecked;
+    booking.missed = false;
+    renderBookings();
+    renderStandardSlots();
+  } else {
+    console.error('Error toggling checked:', error);
+    alert(`Could not update status: ${error.message}`);
   }
 }
 
@@ -616,7 +619,7 @@ async function toggleMissed(id: string) {
   if (!booking) return;
   const newMissed = !booking.missed;
   
-  const updateData: any = { missed: newMissed };
+  const updateData: any = { missed: newMissed, checked: false }; // Clear checked if marking missed
   if (currentUser) {
     updateData.updated_by = currentUser.username;
     updateData.updated_at = new Date().toISOString();
@@ -624,7 +627,13 @@ async function toggleMissed(id: string) {
 
   const { error } = await supabase.from('bookings').update(updateData).eq('id', id);
   if (!error) {
-    await fetchBookings();
+    booking.missed = newMissed;
+    booking.checked = false;
+    renderBookings();
+    renderStandardSlots();
+  } else {
+    console.error('Error toggling missed:', error);
+    alert(`Could not update status: ${error.message}`);
   }
 }
 
