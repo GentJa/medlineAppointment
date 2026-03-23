@@ -6,18 +6,18 @@ export interface User {
 
 export interface Booking {
   id: string; // UUID in Supabase
-  datetimeIso: string; 
+  datetime_iso: string; 
   
   // Patient Info
-  patientName: string;
-  patientLastName: string;
-  patientPhone?: string;
+  patient_name: string;
+  patient_last_name: string;
+  patient_phone?: string;
 
   // Audit Trail
-  createdBy: string; 
-  createdAt: string; 
-  updatedBy?: string; 
-  updatedAt?: string; 
+  created_by: string; 
+  created_at: string; 
+  updated_by?: string; 
+  updated_at?: string; 
 
   // Status flags
   missed?: boolean;

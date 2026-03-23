@@ -181,13 +181,15 @@ function checkUpcomingAppointments() {
   existingBookings.forEach(b => {
     if (b.missed || b.notified) return;
     
-    const bDate = new Date(b.datetimeIso);
+    const bDate = new Date(b.datetime_iso);
     const diffMs = bDate.getTime() - now.getTime();
     
     if (diffMs > 0 && diffMs <= 5 * 60000) {
-      showNotification(`${b.patientName} ${b.patientLastName} is arriving soon!`);
+      showNotification(`${b.patient_name} ${b.patient_last_name} is arriving soon!`);
       b.notified = true;
-      supabase.from('bookings').update({ notified: true }).eq('id', b.id).then();
+      supabase.from('bookings').update({ notified: true }).eq('id', b.id).then(({error}) => {
+        if (error) console.error('Failed to update notification status:', error);
+      });
     }
   });
 }
@@ -294,7 +296,7 @@ function renderStandardSlots() {
     let isPast = slotDate <= now;
     if (editingBookingId) {
       const existing = existingBookings.find(b => b.id === editingBookingId);
-      if (existing && new Date(existing.datetimeIso).getTime() === slotDate.getTime()) {
+      if (existing && new Date(existing.datetime_iso).getTime() === slotDate.getTime()) {
         isPast = false;
       }
     }
@@ -344,7 +346,7 @@ function validateSelection() {
       let keepingPast = false;
       if (editingBookingId) {
          const existing = existingBookings.find(b => b.id === editingBookingId);
-         if (existing && new Date(existing.datetimeIso).getTime() === finalDateTime.getTime()) {
+         if (existing && new Date(existing.datetime_iso).getTime() === finalDateTime.getTime()) {
            keepingPast = true;
          }
       }
@@ -388,12 +390,12 @@ async function handleBooking() {
       const { error } = await supabase
         .from('bookings')
         .update({
-          datetimeIso: finalDateTime.toISOString(),
-          patientName: fn,
-          patientLastName: ln,
-          patientPhone: phone || null,
-          updatedBy: currentUser.username,
-          updatedAt: new Date().toISOString()
+          datetime_iso: finalDateTime.toISOString(),
+          patient_name: fn,
+          patient_last_name: ln,
+          patient_phone: phone || null,
+          updated_by: currentUser.username,
+          updated_at: new Date().toISOString()
         })
         .eq('id', editingBookingId);
 
@@ -404,12 +406,12 @@ async function handleBooking() {
       const { error } = await supabase
         .from('bookings')
         .insert([{
-          datetimeIso: finalDateTime.toISOString(),
-          patientName: fn,
-          patientLastName: ln,
-          patientPhone: phone || null,
-          createdBy: currentUser.username,
-          createdAt: new Date().toISOString()
+          datetime_iso: finalDateTime.toISOString(),
+          patient_name: fn,
+          patient_last_name: ln,
+          patient_phone: phone || null,
+          created_by: currentUser.username,
+          created_at: new Date().toISOString()
         }]);
 
       if (error) throw error;
@@ -450,11 +452,11 @@ function startEdit(id: string) {
   if (!booking) return;
   
   editingBookingId = booking.id;
-  firstNameInput.value = booking.patientName;
-  lastNameInput.value = booking.patientLastName;
-  phoneInput.value = booking.patientPhone || '';
+  firstNameInput.value = booking.patient_name;
+  lastNameInput.value = booking.patient_last_name;
+  phoneInput.value = booking.patient_phone || '';
   
-  const d = new Date(booking.datetimeIso);
+  const d = new Date(booking.datetime_iso);
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -517,28 +519,28 @@ function cancelEdit() {
 function renderBookings() {
   bookingsList.innerHTML = '';
   // Filter by selected date and sort ascending
-  const selectedDateBookings = existingBookings.filter(b => b.datetimeIso.startsWith(selectedDateString));
-  const sorted = [...selectedDateBookings].sort((a, b) => new Date(a.datetimeIso).getTime() - new Date(b.datetimeIso).getTime());
+  const selectedDateBookings = existingBookings.filter(b => b.datetime_iso.startsWith(selectedDateString));
+  const sorted = [...selectedDateBookings].sort((a, b) => new Date(a.datetime_iso).getTime() - new Date(b.datetime_iso).getTime());
   
   sorted.forEach(b => {
     const li = document.createElement('li');
     li.className = 'booking-item';
     
-    const d = new Date(b.datetimeIso);
+    const d = new Date(b.datetime_iso);
     const dateText = `${d.toLocaleDateString()} at ${formatTime(d)}`;
     
     let auditTrailHtml = `<div class="audit-trail">
-      <span>Added by <strong>${escapeHTML(b.createdBy)}</strong></span>`;
+      <span>Added by <strong>${escapeHTML(b.created_by)}</strong></span>`;
     
-    if (b.updatedBy) {
-      auditTrailHtml += `<span>Last modified by <strong>${escapeHTML(b.updatedBy)}</strong></span>`;
+    if (b.updated_by) {
+      auditTrailHtml += `<span>Last modified by <strong>${escapeHTML(b.updated_by)}</strong></span>`;
     }
     auditTrailHtml += `</div>`;
 
     li.innerHTML = `
       <div class="booking-info">
-        <h4>${escapeHTML(b.patientName)} ${escapeHTML(b.patientLastName)} ${b.missed ? '<span style="color:var(--error-text);font-size:0.85rem;">(Missed)</span>' : ''}</h4>
-        ${b.patientPhone ? `<div class="patient-phone" style="font-size:0.9rem; color:var(--text-secondary); margin-bottom: 0.25rem;">📞 ${escapeHTML(b.patientPhone)}</div>` : ''}
+        <h4>${escapeHTML(b.patient_name)} ${escapeHTML(b.patient_last_name)} ${b.missed ? '<span style="color:var(--error-text);font-size:0.85rem;">(Missed)</span>' : ''}</h4>
+        ${b.patient_phone ? `<div class="patient_phone" style="font-size:0.9rem; color:var(--text-secondary); margin-bottom: 0.25rem;">📞 ${escapeHTML(b.patient_phone)}</div>` : ''}
         <div class="datetime">${dateText}</div>
         ${auditTrailHtml}
       </div>
@@ -579,8 +581,8 @@ async function toggleMissed(id: string) {
   
   const updateData: any = { missed: newMissed };
   if (currentUser) {
-    updateData.updatedBy = currentUser.username;
-    updateData.updatedAt = new Date().toISOString();
+    updateData.updated_by = currentUser.username;
+    updateData.updated_at = new Date().toISOString();
   }
 
   const { error } = await supabase.from('bookings').update(updateData).eq('id', id);

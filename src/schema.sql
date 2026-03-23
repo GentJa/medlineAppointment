@@ -2,17 +2,18 @@
 
 CREATE TABLE bookings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  datetimeIso TIMESTAMPTZ NOT NULL,
-  patientName TEXT NOT NULL,
-  patientLastName TEXT NOT NULL,
-  patientPhone TEXT,
-  createdBy TEXT NOT NULL,
-  createdAt TIMESTAMPTZ DEFAULT NOW(),
-  updatedBy TEXT,
-  updatedAt TIMESTAMPTZ,
+  datetime_iso TIMESTAMPTZ NOT NULL,
+  patient_name TEXT NOT NULL,
+  patient_last_name TEXT NOT NULL,
+  patient_phone TEXT,
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_by TEXT,
+  updated_at TIMESTAMPTZ,
   missed BOOLEAN DEFAULT FALSE,
   notified BOOLEAN DEFAULT FALSE
 );
+
 
 -- Note: Ensure "uuid-ossp" extension is enabled if using uuid_generate_v4()
 -- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
