@@ -1,4 +1,4 @@
-import { generateTimeSlots, isSlotAvailable, isSunday, authenticateUser, escapeHTML, type Booking, type User } from './logic';
+import { generateTimeSlots, isSunday, authenticateUser, escapeHTML, type Booking, type User } from './logic';
 import { supabase } from './supabase';
 
 // @ts-ignore
@@ -16,7 +16,6 @@ let selectedDateString: string = '';
 let selectedTimeString: string = ''; 
 let selectedTimeStandardSlotObj: Date | null = null;
 let editingBookingId: string | null = null;
-let notificationsEnabled = true;
 
 // DOM Elements
 const loginModal = document.getElementById('login-modal') as HTMLDivElement;
@@ -28,8 +27,6 @@ const passwordInput = document.getElementById('password-input') as HTMLInputElem
 const loginError = document.getElementById('login-error') as HTMLDivElement;
 const logoutBtn = document.getElementById('logout-btn') as HTMLButtonElement;
 const deleteAllBtn = document.getElementById('delete-all-btn') as HTMLButtonElement;
-const notificationCheckbox = document.getElementById('notification-checkbox') as HTMLInputElement;
-const notificationsContainer = document.getElementById('notifications-container') as HTMLDivElement;
 
 const modeRadios = document.querySelectorAll<HTMLInputElement>('input[name="mode"]');
 const firstNameInput = document.getElementById('first-name-input') as HTMLInputElement;
@@ -92,23 +89,14 @@ function init() {
     if (currentUser?.role === 'admin') {
       if (confirm('Are you sure you want to delete all appointments? This action cannot be undone.')) {
         const { error } = await supabase.from('bookings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        if (error) {
-           showNotification('Error deleting appointments.');
-        } else {
-           existingBookings = [];
-           renderBookings();
-           showNotification('All appointments have been deleted.');
-        }
+         } else {
+            existingBookings = [];
+            renderBookings();
+         }
       }
     }
   });
 
-  notificationCheckbox.addEventListener('change', (e) => {
-    notificationsEnabled = (e.target as HTMLInputElement).checked;
-    if (currentUser) {
-      localStorage.setItem(`notify_${currentUser.id}`, String(notificationsEnabled));
-    }
-  });
 
   modeRadios.forEach(radio => {
     radio.addEventListener('change', (e) => {
@@ -135,9 +123,6 @@ function init() {
 
   // Setup Realtime Sync
   setupRealtime();
-
-  // Periodic check
-  setInterval(checkUpcomingAppointments, 15000);
 }
 
 function setupRealtime() {
@@ -180,49 +165,11 @@ async function fetchBookings() {
    renderStandardSlots(); 
 }
 
-function showNotification(message: string) {
-  if (!notificationsEnabled) return;
-  const toast = document.createElement('div');
-  toast.className = 'toast-notification';
-  toast.innerHTML = `<span>🔔</span> <span>${message}</span>`;
-  notificationsContainer.appendChild(toast);
-  
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(10px) scale(0.95)';
-    toast.style.transition = 'all 0.3s ease';
-    setTimeout(() => toast.remove(), 300);
-  }, 6000);
-}
-
-function checkUpcomingAppointments() {
-  if (!notificationsEnabled) return;
-  const now = new Date();
-  
-  existingBookings.forEach(b => {
-    if (b.missed || b.notified) return;
-    
-    const bDate = new Date(b.datetime_iso);
-    const diffMs = bDate.getTime() - now.getTime();
-    
-    if (diffMs > 0 && diffMs <= 5 * 60000) {
-      showNotification(`${b.patient_name} ${b.patient_last_name} is arriving soon!`);
-      b.notified = true;
-      supabase.from('bookings').update({ notified: true }).eq('id', b.id).then(({error}) => {
-        if (error) console.error('Failed to update notification status:', error);
-      });
-    }
-  });
-}
 
 function loginUser(user: User) {
   currentUser = user;
   localStorage.setItem('medline_user', JSON.stringify(user));
   currentUserDisplay.textContent = `(${user.username})`;
-  
-  const savedPref = localStorage.getItem(`notify_${user.id}`);
-  notificationsEnabled = savedPref === null ? true : savedPref === 'true';
-  notificationCheckbox.checked = notificationsEnabled;
 
   if (currentUser.role === 'admin') {
     deleteAllBtn.classList.remove('hidden');
@@ -314,8 +261,6 @@ function renderStandardSlots() {
   const now = new Date();
 
   slots.forEach(slotDate => {
-    const isAvailable = isSlotAvailable(slotDate, existingBookings, editingBookingId || undefined);
-    
     let isPast = slotDate <= now;
     if (editingBookingId) {
       const existing = existingBookings.find(b => b.id === editingBookingId);
@@ -325,11 +270,26 @@ function renderStandardSlots() {
     }
 
     const timeString = formatTime(slotDate);
+    const isoString = slotDate.toISOString();
+    
+    // Count bookings for this slot
+    const countForSlot = existingBookings.filter(b => b.datetime_iso === isoString).length;
 
     const btn = document.createElement('button');
     btn.className = 'slot-btn';
-    btn.textContent = timeString;
-    btn.disabled = !isAvailable || isPast;
+    
+    const timeSpan = document.createElement('span');
+    timeSpan.textContent = timeString;
+    btn.appendChild(timeSpan);
+    
+    if (countForSlot > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'slot-badge';
+      badge.textContent = String(countForSlot);
+      btn.appendChild(badge);
+    }
+
+    btn.disabled = isPast; // Allow multiple bookings per slot, just disable if past
     
     if (selectedTimeStandardSlotObj && selectedTimeStandardSlotObj.getTime() === slotDate.getTime()) {
       btn.classList.add('selected');

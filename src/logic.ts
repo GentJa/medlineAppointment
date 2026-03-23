@@ -21,7 +21,6 @@ export interface Booking {
 
   // Status flags
   missed?: boolean;
-  notified?: boolean;
   checked?: boolean;
 }
 
@@ -77,14 +76,6 @@ export function isValidStandardSlot(date: Date): boolean {
   return true;
 }
 
-/**
- * Checks if a slot is available (not exactly duplicate with any existing booking).
- * Pass an optional `excludeBookingId` to ignore the current booking when editing.
- */
-export function isSlotAvailable(_queryDate: Date, _bookings: Booking[], _excludeBookingId?: string): boolean {
-  // Now always returns true to allow multiple appointments per slot
-  return true;
-}
 
 export const MOCK_USERS: User[] = [
   { id: 'user_a', username: 'Admin', role: 'admin' },
