@@ -145,9 +145,14 @@ async function fetchBookings() {
    
    if (error) {
      console.error('Error fetching bookings:', error);
-     showNotification(`Database Error: ${error.message}`);
+     if (error.code === 'PGRST205') {
+       showNotification(`Database Error: Table "bookings" is missing! Please run the SQL in src/schema.sql in your Supabase Editor.`);
+     } else {
+       showNotification(`Database Error: ${error.message}`);
+     }
      return;
    }
+
 
    existingBookings = data || [];
    renderBookings();
@@ -426,9 +431,14 @@ async function handleBooking() {
     bookingSuccess.classList.remove('hidden');
   } catch (err: any) {
     console.error('Booking error:', err);
-    bookingError.textContent = `Error: ${err.message || 'Failed to save appointment. Please try again.'}`;
+    if (err.code === 'PGRST205') {
+      bookingError.textContent = 'Error: The "bookings" table is missing in Supabase! Please run the SQL in src/schema.sql.';
+    } else {
+      bookingError.textContent = `Error: ${err.message || 'Failed to save appointment. Please try again.'}`;
+    }
     bookingError.classList.remove('hidden');
   } finally {
+
 
     bookButton.disabled = false;
     validateSelection();
