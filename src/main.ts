@@ -580,6 +580,9 @@ function startEdit(id: string) {
   const booking = existingBookings.find(b => b.id === id);
   if (!booking) return;
 
+  // Switch to the form tab so the user sees the edit form immediately
+  switchTab('new');
+
   editingBookingId = booking.id;
   firstNameInput.value = booking.patient_name;
   lastNameInput.value = booking.patient_last_name;
