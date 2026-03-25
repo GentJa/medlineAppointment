@@ -409,8 +409,16 @@ function renderStandardSlots() {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
 
+      // Always select the slot for booking
+      document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedTimeStandardSlotObj = slotDate;
+      validateSelection();
+      bookingError.classList.add('hidden');
+      bookingSuccess.classList.add('hidden');
+
       if (countForSlot > 0) {
-        // Toggle tooltip
+        // Also toggle tooltip to show patient names
         const isOpen = btn.classList.contains('previewing');
         hideSlotTooltip();
         if (!isOpen) {
@@ -418,14 +426,7 @@ function renderStandardSlots() {
           showSlotTooltip(btn, slotDate, timeString);
         }
       } else {
-        // Empty slot — select for booking
         hideSlotTooltip();
-        document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-        selectedTimeStandardSlotObj = slotDate;
-        validateSelection();
-        bookingError.classList.add('hidden');
-        bookingSuccess.classList.add('hidden');
       }
     });
 
@@ -665,6 +666,7 @@ function renderBookings() {
         <button class="mark-checked-btn" data-id="${b.id}">${b.checked ? 'Uncheck' : 'Check'}</button>
         <button class="mark-missed-btn" data-id="${b.id}">${b.missed ? 'Undo Missed' : 'Mark Missed'}</button>
         <button class="edit-action-btn" data-id="${b.id}">Edit</button>
+        ${currentUser?.role === 'admin' ? `<button class="delete-action-btn" data-id="${b.id}">Delete</button>` : ''}
       </div>
     `;
 
@@ -694,6 +696,32 @@ function renderBookings() {
       if (id) toggleChecked(id);
     });
   });
+
+  // Attach delete listeners (admin only)
+  document.querySelectorAll('.delete-action-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const id = (e.currentTarget as HTMLButtonElement).getAttribute('data-id');
+      if (id) deleteBooking(id);
+    });
+  });
+}
+
+async function deleteBooking(id: string) {
+  const booking = existingBookings.find(b => b.id === id);
+  if (!booking || currentUser?.role !== 'admin') return;
+
+  const name = `${booking.patient_name} ${booking.patient_last_name}`;
+  if (!confirm(`Are you sure you want to delete the appointment for ${name}?`)) return;
+
+  const { error } = await supabase.from('bookings').delete().eq('id', id);
+  if (!error) {
+    existingBookings = existingBookings.filter(b => b.id !== id);
+    renderBookings();
+    renderStandardSlots();
+  } else {
+    console.error('Error deleting booking:', error);
+    alert(`Could not delete: ${error.message}`);
+  }
 }
 
 async function toggleChecked(id: string) {

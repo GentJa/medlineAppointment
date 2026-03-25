@@ -563,6 +563,12 @@ body {
   background: white;
 }
 
+.delete-action-btn {
+  border: 1px solid var(--error-border);
+  color: var(--error-text);
+  background: var(--error-bg);
+}
+
 .mark-checked-btn {
   border: 1px solid var(--success-border);
   color: var(--success-text);
