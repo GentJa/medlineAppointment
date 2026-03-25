@@ -13,7 +13,7 @@ let existingBookings: Booking[] = [];
 let currentUser: User | null = null;
 let currentMode: 'standard' | 'custom' = 'standard';
 let selectedDateString: string = '';
-let selectedTimeString: string = ''; 
+let selectedTimeString: string = '';
 let selectedTimeStandardSlotObj: Date | null = null;
 let editingBookingId: string | null = null;
 
@@ -54,11 +54,11 @@ const bookingsListSection = document.getElementById('bookings-list-section') as 
 function init() {
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
-  
+
   dateInput.value = todayStr;
-  
+
   selectedDateString = dateInput.value;
-  
+
   handleDateChange();
 
   // Restore Session
@@ -77,7 +77,7 @@ function init() {
     e.preventDefault();
     const u = usernameInput.value.trim();
     const p = passwordInput.value.trim();
-    
+
     if (u && p) {
       const authUser = authenticateUser(u, p);
       if (authUser) {
@@ -90,14 +90,14 @@ function init() {
   });
 
   logoutBtn.addEventListener('click', logoutUser);
-  
+
   deleteAllBtn.addEventListener('click', async () => {
     if (currentUser?.role === 'admin') {
       if (confirm('Are you sure you want to delete all appointments? This action cannot be undone.')) {
         const { error } = await supabase.from('bookings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
         if (!error) {
-           existingBookings = [];
-           renderBookings();
+          existingBookings = [];
+          renderBookings();
         }
       }
     }
@@ -169,24 +169,24 @@ function switchTab(tab: 'new' | 'list') {
 
 // Supabase Logic
 async function fetchBookings() {
-   const { data, error } = await supabase
-     .from('bookings')
-     .select('*');
-   
-   if (error) {
-     console.error('Error fetching bookings:', error);
-     if (error.code === 'PGRST205') {
-       alert(`Database Error: Table "bookings" is missing! Please run the SQL in src/schema.sql in your Supabase Editor.`);
-     } else {
-       alert(`Database Error: ${error.message}`);
-     }
-     return;
-   }
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('*');
+
+  if (error) {
+    console.error('Error fetching bookings:', error);
+    if (error.code === 'PGRST205') {
+      alert(`Database Error: Table "bookings" is missing! Please run the SQL in src/schema.sql in your Supabase Editor.`);
+    } else {
+      alert(`Database Error: ${error.message}`);
+    }
+    return;
+  }
 
 
-   existingBookings = data || [];
-   renderBookings();
-   renderStandardSlots(); 
+  existingBookings = data || [];
+  renderBookings();
+  renderStandardSlots();
 }
 
 
@@ -237,13 +237,13 @@ function handleModeChange() {
     standardSlotsContainer.classList.add('hidden');
     customTimeContainer.classList.remove('hidden');
   }
-  
+
   validateSelection();
 }
 
 function handleDateChange() {
   renderBookings();
-  
+
   if (!selectedDateString) {
     sundayWarning.classList.add('hidden');
     dateInput.classList.remove('is-sunday');
@@ -266,12 +266,97 @@ function handleDateChange() {
   selectedTimeStandardSlotObj = null;
   selectedTimeString = '';
   if (currentMode === 'custom') customTimeInput.value = '';
-  
+
   if (currentMode === 'standard') {
     renderStandardSlots();
   }
-  
+
   validateSelection();
+}
+
+// Shared floating tooltip for patient names
+let slotTooltip: HTMLDivElement | null = null;
+
+function getOrCreateTooltip(): HTMLDivElement {
+  if (!slotTooltip) {
+    slotTooltip = document.createElement('div');
+    slotTooltip.className = 'slot-tooltip';
+    slotTooltip.id = 'slot-tooltip';
+    document.body.appendChild(slotTooltip);
+
+    // Dismiss on outside click
+    document.addEventListener('click', (e) => {
+      if (slotTooltip && !slotTooltip.contains(e.target as Node) &&
+          !(e.target as HTMLElement).closest('.slot-btn')) {
+        hideSlotTooltip();
+      }
+    });
+  }
+  return slotTooltip;
+}
+
+function showSlotTooltip(btn: HTMLButtonElement, slotDate: Date, timeString: string) {
+  const tooltip = getOrCreateTooltip();
+  const bookingsForSlot = existingBookings.filter(
+    b => new Date(b.datetime_iso).getTime() === slotDate.getTime()
+  );
+
+  // Build content
+  let html = `<div class="slot-tooltip-header">🕐 ${timeString}</div>`;
+  bookingsForSlot.forEach(b => {
+    const statusParts: string[] = [];
+    if (b.checked) statusParts.push('<span class="status-label checked-label">✓</span>');
+    if (b.missed) statusParts.push('<span class="status-label missed-label">✗</span>');
+    html += `<div class="slot-tooltip-row">
+      <span class="slot-tooltip-name">${escapeHTML(b.patient_name)} ${escapeHTML(b.patient_last_name)}</span>
+      ${statusParts.length ? `<span class="slot-tooltip-status">${statusParts.join('')}</span>` : ''}
+    </div>`;
+  });
+
+  tooltip.innerHTML = html;
+  tooltip.classList.add('visible');
+
+  // Position: above the button, horizontally centered on it
+  const rect = btn.getBoundingClientRect();
+  const scrollY = window.scrollY || document.documentElement.scrollTop;
+  const scrollX = window.scrollX || document.documentElement.scrollLeft;
+
+  // Temporarily make visible to measure
+  tooltip.style.visibility = 'hidden';
+  tooltip.style.top = '0px';
+  tooltip.style.left = '0px';
+
+  requestAnimationFrame(() => {
+    const tipW = tooltip.offsetWidth;
+    const tipH = tooltip.offsetHeight;
+
+    let top = rect.top + scrollY - tipH - 8;
+    let left = rect.left + scrollX + rect.width / 2 - tipW / 2;
+
+    // Keep within viewport horizontally
+    const vw = window.innerWidth;
+    if (left < 8) left = 8;
+    if (left + tipW > vw - 8) left = vw - tipW - 8;
+
+    // If not enough room above, show below
+    if (top < scrollY + 8) {
+      top = rect.bottom + scrollY + 8;
+      tooltip.classList.add('tooltip-below');
+    } else {
+      tooltip.classList.remove('tooltip-below');
+    }
+
+    tooltip.style.top = `${top}px`;
+    tooltip.style.left = `${left}px`;
+    tooltip.style.visibility = 'visible';
+  });
+}
+
+function hideSlotTooltip() {
+  if (slotTooltip) {
+    slotTooltip.classList.remove('visible');
+  }
+  document.querySelectorAll('.slot-btn.previewing').forEach(b => b.classList.remove('previewing'));
 }
 
 function renderStandardSlots() {
@@ -294,20 +379,20 @@ function renderStandardSlots() {
     }
 
     const timeString = formatTime(slotDate);
-    
+
     // Count bookings for this slot using getTime() for robustness
     const countForSlot = existingBookings.filter(b => new Date(b.datetime_iso).getTime() === slotDate.getTime()).length;
 
-    const btn = document.createElement('button');
+    const btn = document.createElement('button')  as HTMLButtonElement;
     btn.className = 'slot-btn';
     if (countForSlot > 1) {
       btn.classList.add('has-multiple');
     }
-    
+
     const timeSpan = document.createElement('span');
     timeSpan.textContent = timeString;
     btn.appendChild(timeSpan);
-    
+
     if (countForSlot > 0) {
       const badge = document.createElement('span');
       badge.className = 'slot-badge';
@@ -316,18 +401,32 @@ function renderStandardSlots() {
     }
 
     btn.disabled = isPast; // Allow multiple bookings per slot, just disable if past
-    
+
     if (selectedTimeStandardSlotObj && selectedTimeStandardSlotObj.getTime() === slotDate.getTime()) {
       btn.classList.add('selected');
     }
 
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-      selectedTimeStandardSlotObj = slotDate;
-      validateSelection();
-      bookingError.classList.add('hidden');
-      bookingSuccess.classList.add('hidden');
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      if (countForSlot > 0) {
+        // Toggle tooltip
+        const isOpen = btn.classList.contains('previewing');
+        hideSlotTooltip();
+        if (!isOpen) {
+          btn.classList.add('previewing');
+          showSlotTooltip(btn, slotDate, timeString);
+        }
+      } else {
+        // Empty slot — select for booking
+        hideSlotTooltip();
+        document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedTimeStandardSlotObj = slotDate;
+        validateSelection();
+        bookingError.classList.add('hidden');
+        bookingSuccess.classList.add('hidden');
+      }
     });
 
     standardSlotsContainer.appendChild(btn);
@@ -351,20 +450,20 @@ function validateSelection() {
       const [year, month, day] = selectedDateString.split('-').map(Number);
       const [hours, minutes] = selectedTimeString.split(':').map(Number);
       const finalDateTime = new Date(year, month - 1, day, hours, minutes, 0, 0);
-      
+
       let keepingPast = false;
       if (editingBookingId) {
-         const existing = existingBookings.find(b => b.id === editingBookingId);
-         if (existing && new Date(existing.datetime_iso).getTime() === finalDateTime.getTime()) {
-           keepingPast = true;
-         }
+        const existing = existingBookings.find(b => b.id === editingBookingId);
+        if (existing && new Date(existing.datetime_iso).getTime() === finalDateTime.getTime()) {
+          keepingPast = true;
+        }
       }
 
       if (finalDateTime < now && !keepingPast) {
-         bookingError.textContent = 'Cannot select a past custom time.';
-         bookingError.classList.remove('hidden');
+        bookingError.textContent = 'Cannot select a past custom time.';
+        bookingError.classList.remove('hidden');
       } else {
-         isValid = true;
+        isValid = true;
       }
     }
   }
@@ -408,27 +507,27 @@ async function handleBooking() {
         })
         .eq('id', editingBookingId);
 
-    if (error) throw error;
-    bookingSuccess.textContent = 'Appointment updated successfully!';
-    cancelEdit();
-} else {
-    const { error } = await supabase
-    .from('bookings')
-    .insert([{
-        datetime_iso: finalDateTime.toISOString(),
-        patient_name: fn,
-        patient_last_name: ln,
-        patient_phone: phone || null,
-        created_by: currentUser.username,
-        created_at: new Date().toISOString()
-    }]);
+      if (error) throw error;
+      bookingSuccess.textContent = 'Appointment updated successfully!';
+      cancelEdit();
+    } else {
+      const { error } = await supabase
+        .from('bookings')
+        .insert([{
+          datetime_iso: finalDateTime.toISOString(),
+          patient_name: fn,
+          patient_last_name: ln,
+          patient_phone: phone || null,
+          created_by: currentUser.username,
+          created_at: new Date().toISOString()
+        }]);
 
-    if (error) throw error;
-    bookingSuccess.textContent = 'Appointment saved successfully!';
-      
+      if (error) throw error;
+      bookingSuccess.textContent = 'Appointment saved successfully!';
+
       if (currentMode === 'standard') {
         selectedTimeStandardSlotObj = null;
-        renderStandardSlots(); 
+        renderStandardSlots();
       } else {
         customTimeInput.value = '';
         selectedTimeString = '';
@@ -437,7 +536,7 @@ async function handleBooking() {
       lastNameInput.value = '';
       phoneInput.value = '';
     }
-    
+
     await fetchBookings();
     bookingSuccess.classList.remove('hidden');
   } catch (err: any) {
@@ -459,20 +558,20 @@ async function handleBooking() {
 function startEdit(id: string) {
   const booking = existingBookings.find(b => b.id === id);
   if (!booking) return;
-  
+
   editingBookingId = booking.id;
   firstNameInput.value = booking.patient_name;
   lastNameInput.value = booking.patient_last_name;
   phoneInput.value = booking.patient_phone || '';
-  
+
   const d = new Date(booking.datetime_iso);
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
-  
+
   dateInput.value = `${year}-${month}-${day}`;
   selectedDateString = dateInput.value;
-  
+
   // Decide Mode and Select Time based on precision
   const hours = d.getHours();
   const mins = d.getMinutes();
@@ -480,7 +579,7 @@ function startEdit(id: string) {
 
   currentMode = isStandard ? 'standard' : 'custom';
   (document.querySelector(`input[name="mode"][value="${currentMode}"]`) as HTMLInputElement).checked = true;
-  
+
   handleModeChange();
   handleDateChange();
 
@@ -498,9 +597,9 @@ function startEdit(id: string) {
   cancelEditBtn.classList.remove('hidden');
   bookingSuccess.classList.add('hidden');
   bookingError.classList.add('hidden');
-  
+
   validateSelection();
-  
+
   // scroll to top
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -513,12 +612,12 @@ function cancelEdit() {
   firstNameInput.value = '';
   lastNameInput.value = '';
   phoneInput.value = '';
-  
+
   // Reset date to today
   const today = new Date();
   dateInput.value = today.toISOString().split('T')[0];
   selectedDateString = dateInput.value;
-  
+
   currentMode = 'standard';
   (document.querySelector(`input[name="mode"][value="standard"]`) as HTMLInputElement).checked = true;
   handleModeChange();
@@ -530,23 +629,23 @@ function renderBookings() {
   // Filter by selected date and sort ascending
   const selectedDateBookings = existingBookings.filter(b => b.datetime_iso.startsWith(selectedDateString));
   const sorted = [...selectedDateBookings].sort((a, b) => new Date(a.datetime_iso).getTime() - new Date(b.datetime_iso).getTime());
-  
+
   // Update Header Count
   const listTitle = document.getElementById('bookings-list-title');
   if (listTitle) {
-      listTitle.textContent = `Existing Bookings ( ${selectedDateBookings.length} )`;
+    listTitle.textContent = `Existing Bookings ( ${selectedDateBookings.length} )`;
   }
 
   sorted.forEach(b => {
     const li = document.createElement('li');
     li.className = 'booking-item';
-    
+
     const d = new Date(b.datetime_iso);
     const dateText = `${d.toLocaleDateString()} at ${formatTime(d)}`;
-    
+
     let auditTrailHtml = `<div class="audit-trail">
       <span>Added by <strong>${escapeHTML(b.created_by)}</strong></span>`;
-    
+
     if (b.updated_by) {
       auditTrailHtml += `<span>Last modified by <strong>${escapeHTML(b.updated_by)}</strong></span>`;
     }
@@ -568,7 +667,7 @@ function renderBookings() {
         <button class="edit-action-btn" data-id="${b.id}">Edit</button>
       </div>
     `;
-    
+
     bookingsList.appendChild(li);
   });
 
@@ -601,7 +700,7 @@ async function toggleChecked(id: string) {
   const booking = existingBookings.find(b => b.id === id);
   if (!booking) return;
   const newChecked = !booking.checked;
-  
+
   const updateData: any = { checked: newChecked, missed: false }; // Clear missed if checking
   if (currentUser) {
     updateData.updated_by = currentUser.username;
@@ -624,7 +723,7 @@ async function toggleMissed(id: string) {
   const booking = existingBookings.find(b => b.id === id);
   if (!booking) return;
   const newMissed = !booking.missed;
-  
+
   const updateData: any = { missed: newMissed, checked: false }; // Clear checked if marking missed
   if (currentUser) {
     updateData.updated_by = currentUser.username;
