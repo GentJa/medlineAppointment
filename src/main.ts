@@ -366,10 +366,27 @@ function renderStandardSlots() {
   const [year, month, day] = selectedDateString.split('-').map(Number);
   const selectedDateObj = new Date(year, month - 1, day);
 
-  const slots = generateTimeSlots(selectedDateObj);
+  const standardSlots = generateTimeSlots(selectedDateObj);
+  const standardTimes = new Set(standardSlots.map(s => s.getTime()));
   const now = new Date();
 
-  slots.forEach(slotDate => {
+  // Find custom-time bookings for this date that don't match a standard slot
+  const customSlotTimes = new Map<number, Date>();
+  existingBookings
+    .filter(b => b.datetime_iso.startsWith(selectedDateString))
+    .forEach(b => {
+      const dt = new Date(b.datetime_iso);
+      if (!standardTimes.has(dt.getTime()) && !customSlotTimes.has(dt.getTime())) {
+        customSlotTimes.set(dt.getTime(), dt);
+      }
+    });
+
+  // Merge and sort all slots chronologically
+  const allSlots = [...standardSlots, ...customSlotTimes.values()]
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  allSlots.forEach(slotDate => {
+    const isCustomSlot = !standardTimes.has(slotDate.getTime());
     let isPast = slotDate <= now;
     if (editingBookingId) {
       const existing = existingBookings.find(b => b.id === editingBookingId);
@@ -385,6 +402,9 @@ function renderStandardSlots() {
 
     const btn = document.createElement('button')  as HTMLButtonElement;
     btn.className = 'slot-btn';
+    if (isCustomSlot) {
+      btn.classList.add('custom-slot');
+    }
     if (countForSlot > 1) {
       btn.classList.add('has-multiple');
     }
