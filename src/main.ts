@@ -420,7 +420,12 @@ function renderStandardSlots() {
       btn.appendChild(badge);
     }
 
-    btn.disabled = isPast; // Allow multiple bookings per slot, just disable if past
+    // Past slots with bookings stay clickable (for tooltip), past slots with no bookings are fully disabled
+    if (isPast && countForSlot === 0) {
+      btn.disabled = true;
+    } else if (isPast) {
+      btn.classList.add('past-booked'); // visual cue: dimmed but clickable
+    }
 
     if (selectedTimeStandardSlotObj && selectedTimeStandardSlotObj.getTime() === slotDate.getTime()) {
       btn.classList.add('selected');
@@ -429,7 +434,20 @@ function renderStandardSlots() {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
 
-      // Always select the slot for booking
+      if (isPast) {
+        // Past slot: only show tooltip, don't select for booking
+        if (countForSlot > 0) {
+          const isOpen = btn.classList.contains('previewing');
+          hideSlotTooltip();
+          if (!isOpen) {
+            btn.classList.add('previewing');
+            showSlotTooltip(btn, slotDate, timeString);
+          }
+        }
+        return;
+      }
+
+      // Future slot: select for booking
       document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       selectedTimeStandardSlotObj = slotDate;

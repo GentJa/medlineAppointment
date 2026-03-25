@@ -313,6 +313,16 @@ body {
   cursor: not-allowed;
 }
 
+/* Past slots that still have bookings: dimmed but clickable for tooltip */
+.slot-btn.past-booked {
+  opacity: 0.6;
+  background-color: #fffbeb;
+  border-color: #fcd34d;
+  color: #92400e;
+  cursor: pointer;
+  text-decoration: line-through;
+}
+
 .slot-btn {
   position: relative;
   display: flex;
